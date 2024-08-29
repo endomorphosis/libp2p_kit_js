@@ -1,5 +1,5 @@
 {
-    "name": "ipfs_kit_js",
+    "name": "libp2p_kit_js",
     "version": "1.0.0",
     "description": "This is a library that handles libp2p, REST, and websocket connections",
     "type": "module",
@@ -14,13 +14,13 @@
     },
     "repository": {
       "type": "git",
-      "url": "git+https://github.com/endomorphosis/ipfs_kit_js.git"
+      "url": "git+https://github.com/endomorphosis/libp2p_kit_js.git"
     },
     "author": "Benjamin Barber",
     "license": "AGPL-3.0-only",
     "bugs": {
-      "url": "https://github.com/endomorphosis/ipfs_kit_js/issues"
+      "url": "https://github.com/endomorphosis/libp2p_kit_js/issues"
     },
-    "homepage": "https://github.com/endomorphosis/ipfs_kit_js#readme"
+    "homepage": "https://github.com/endomorphosis/libp2p_kit_js#readme"
   }
   
