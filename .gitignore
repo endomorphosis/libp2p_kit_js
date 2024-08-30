@@ -1,0 +1,4 @@
+node_modules
+package-lock.json
+orbitdb_kit_lib/bin/*
+config/config.toml
