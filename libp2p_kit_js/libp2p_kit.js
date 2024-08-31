@@ -1,7 +1,10 @@
+import { s3Kit } from './s3_kit.js';
+
 export class libp2pKitJs {
     constructor(resources, metadata) {
         this.resources = resources;
         this.metadata = metadata;
+        this.s3Kit = new s3Kit(resources, metadata);
     }
 
     async init() {
