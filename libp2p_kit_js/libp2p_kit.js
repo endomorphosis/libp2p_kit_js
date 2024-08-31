@@ -10,7 +10,7 @@ export class libp2pKitJs {
         this.s3Kit = new s3Kit(resources, metadata);
         this.websocketKit = new websocketKit(resources, metadata);
         this.aria2Kit = new aria2Kit(resources, metadata )
-        this.libp2p = new libp2pKit( resources, metadata )
+        this.libp2pKit = new libp2pKit( resources, metadata )
     }
 
     async init() {
