@@ -1,4 +1,4 @@
-export class ariaKit {
+export class aria2Kit {
     constructor(resources, metadata) {
         this.resources = resources;
         this.metadata = metadata;
@@ -14,3 +14,4 @@ export class ariaKit {
         throw new Error('ariaKit.test() not implemented');
     }
 }
+export default aria2Kit;

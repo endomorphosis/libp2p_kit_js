@@ -14,3 +14,4 @@ export class websocketKit {
         throw new Error('websocketKit.test() not implemented');
     }
 }
+export default websocketKit;

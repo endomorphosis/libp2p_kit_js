@@ -14,3 +14,4 @@ export class libp2pKit {
         throw new Error('libp2pKit.test() not implemented');
     }
 }
+export default libp2pKit;
