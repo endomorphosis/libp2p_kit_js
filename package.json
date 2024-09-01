@@ -1,26 +1,29 @@
 {
     "name": "libp2p_kit_js",
-    "version": "1.0.14",
+    "version": "1.0.15",
     "description": "This is a library that handles libp2p, REST, and websocket connections",
     "type": "module",
     "main": "index.js",
     "dependencies": {
-      "@mwni/toml": "^1.0.0",
-      "tar": "^7.4.3",
-      "util": "^0.12.5"
+        "@aws-sdk/client-s3": "^3.315.0",
+        "@aws-sdk/lib-storage": "^3.315.0",
+        "@mwni/toml": "^1.0.0",
+        "aws-sdk": "^2.1597.0",
+        "moment": "^2.30.1",
+        "tar": "^7.4.3",
+        "util": "^0.12.5"
     },
     "scripts": {
-      "test": " node tests/test.js"
+        "test": " node tests/test.js"
     },
     "repository": {
-      "type": "git",
-      "url": "git+https://github.com/endomorphosis/libp2p_kit_js.git"
+        "type": "git",
+        "url": "git+https://github.com/endomorphosis/libp2p_kit_js.git"
     },
     "author": "Benjamin Barber",
     "license": "AGPL-3.0-only",
     "bugs": {
-      "url": "https://github.com/endomorphosis/libp2p_kit_js/issues"
+        "url": "https://github.com/endomorphosis/libp2p_kit_js/issues"
     },
     "homepage": "https://github.com/endomorphosis/libp2p_kit_js#readme"
-  }
-  
+}
