@@ -1,5 +1,5 @@
 import { libp2pKitJs } from "../libp2p_kit_js/libp2p_kit.js"
-import { requireConfig } from "../config/config.js";
+// import { requireConfig } from "../config/config.js";
 import path from "path";
 import fs from "fs";
 import os from "os";
@@ -9,7 +9,7 @@ import { t } from "tar";
 export class test_libp2p_kit_js {
     constructor(resources, metadata) {
         this.imports = {};
-        this.config = requireConfig();
+        // this.config = requireConfig();
         this.libp2pKitJs = new libp2pKitJs();
     }
 
