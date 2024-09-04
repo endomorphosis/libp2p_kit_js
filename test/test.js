@@ -85,3 +85,5 @@ if (import.meta.url === 'file://' + process.argv[1]) {
         // process.exit(1);
     }   
 }
+
+export default test_libp2p_kit_js;
