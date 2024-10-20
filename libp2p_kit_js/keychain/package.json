@@ -4,7 +4,7 @@
 	"version": "0.0.0",
 	"main": "index.js",
 	"dependencies": {
-		"@libp2p/crypto": "4.1.9",
+		"@libp2p/crypto": "^4.1.9",
 		"multiformats": "13.2.2",
 		"uint8arrays": "5.1.0"
 	}
