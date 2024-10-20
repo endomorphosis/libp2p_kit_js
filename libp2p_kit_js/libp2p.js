@@ -1,4 +1,4 @@
-import { createNetAuth, deriveKeyPair, verifyNetAuth } from '@tasknet/keychain'
+import { createNetAuth, deriveKeyPair, verifyNetAuth } from './keychain/index.js'
 import { createLibp2p } from 'libp2p'
 import { createFromPrivKey } from '@libp2p/peer-id-factory'
 import { tcp } from '@libp2p/tcp'
