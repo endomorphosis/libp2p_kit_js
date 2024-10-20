@@ -1,0 +1,11 @@
+{
+	"name": "@tasknet/beacon",
+	"type": "module",
+	"version": "0.0.1",
+	"main": "init.js",
+	"dependencies": {
+		"@tasknet/node": "0.0.1",
+		"@mwni/log": "3.1.0",
+		"@mwni/events": "3.0.0"
+	}
+}

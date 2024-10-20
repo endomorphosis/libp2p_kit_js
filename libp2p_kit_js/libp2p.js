@@ -1,24 +1,25 @@
+import { createNetAuth, deriveKeyPair, verifyNetAuth } from '@tasknet/keychain'
 import { createLibp2p } from 'libp2p'
 import { createFromPrivKey } from '@libp2p/peer-id-factory'
 import { tcp } from '@libp2p/tcp'
 import { webSockets } from '@libp2p/websockets'
 import { mplex } from '@libp2p/mplex'
 import { noise } from '@chainsafe/libp2p-noise'
-import { createNetAuth, deriveKeyPair, verifyNetAuth } from '@tasknet/keychain'
 import { multiaddr } from '@multiformats/multiaddr'
-import { flushPeers, recordPeerEvent } from './cache.js'
+import { flushPeerStore, recordPeerEvent } from './store.js'
 import { initMessageBus } from './bus.js'
 
 
 export async function initP2P({ ctx }){
 	ctx.peers = []
-	ctx.handlers = []
+	ctx.peerHandlers = []
+	ctx.messageHistory = []
 	ctx.libp2p = await createLibp2p({
-		peerId: ctx.config.node.identityKey
-			? await createFromPrivKey(deriveKeyPair(ctx.config.node.identityKey))
+		peerId: ctx.config.identityKey
+			? await createFromPrivKey(deriveKeyPair(ctx.config.identityKey))
 			: undefined,
 		addresses: {
-			listen: ctx.config.node.listen
+			listen: ctx.config.listen
 		},
 		transports: [
 			tcp(),
@@ -33,8 +34,6 @@ export async function initP2P({ ctx }){
 	})
 
 	ctx.libp2p.addEventListener('peer:connect', event => {
-		ctx.log.debug(`new connection to ${event.detail}`)
-
 		handleConnection({
 			ctx, 
 			connection: ctx.libp2p.getConnections(event.detail)[0]
@@ -50,10 +49,10 @@ export async function initP2P({ ctx }){
 		})
 	})
 
-	ctx.libp2p.handle('/tasknet/peer/1.0', async ({ connection, stream }) => {
+	ctx.libp2p.handle('/tasknet/1.0', async ({ connection, stream }) => {
 		await handleStream({
 			ctx,
-			connection,
+			peer: ctx.peers.find(peer => peer.id === connection.remotePeer.toString()),
 			stream
 		})
 	})
@@ -61,65 +60,92 @@ export async function initP2P({ ctx }){
 	Object.defineProperty(ctx, 'id', {
 		get: () => ctx.libp2p.peerId.toString()
 	})
+
+	ctx.log.info(`reachable via:`)
+
+	for(let addr of ctx.libp2p.getMultiaddrs()){
+		ctx.log.info(`- ${addr}`)
+	}
 }
 
 export async function registerPeerHandler({ ctx, type, handler }){
-	ctx.handlers.push({ type, handler })
+	ctx.peerHandlers.push({ type, handler })
 }
 
 async function handleConnection({ ctx, connection }){
+	let id = connection.remotePeer.toString()
+	let peerInfo = ctx.store.peers.find(peer => peer.id === id)
+	let peer = {
+		id,
+		connection
+	}
+
+	if(peerInfo){
+		Object.assign(peer, peerInfo)
+		ctx.log.debug(`new ${connection.direction} connection to ${peer.name || 'known peer'} ${id}`)
+	}else{
+		ctx.log.debug(`new ${connection.direction} connection to unknown peer ${id}`)
+	}
+
+	ctx.peers.push(peer)
+
+	recordPeerEvent({ 
+		ctx,
+		peer,
+		event: 'connect'
+	})
+
 	if(shouldInitiateStream({ ctx, theirPeerId: connection.remotePeer })){
 		await handleStream({
 			ctx,
-			connection,
-			stream: await connection.newStream([`/tasknet/peer/1.0`]),
+			peer,
+			stream: await connection.newStream([`/tasknet/1.0`]),
 		})
 	}
 }
 
-async function handleStream({ ctx, connection, stream }){
-	let id = connection.remotePeer.toString()
-	let peer = ctx.cache.peers.find(peer => peer.id === id)
+async function handleStream({ ctx, peer, stream }){
+	let isNew = !peer.authenticated
 
-	if(peer?.connected){
-		ctx.log.warn(`${peer.type} ${peer.name} already connected`)
-		return
-	}
-
-	peer = {
-		...initMessageBus(stream),
-		id,
-		connection,
-		peers: [{ id: ctx.id }],
-		journal: []
-	}
+	Object.assign(
+		peer,
+		initMessageBus(stream)
+	)
 
 	try{
 		Object.assign(
 			peer,
 			await performHandshake({ ctx, peer })
 		)
+		recordPeerEvent({ ctx, peer, event: 'accept' })
 	}catch(e){
+		recordPeerEvent({ ctx, peer, event: 'reject' })
 		ctx.log.debug(`peer ${peer.id} rejected: ${e.message}`)
-		connection.abort()
+		peer.connection.abort()
 		return
+	}finally{
+		flushPeerStore({ ctx })
 	}
 
 	bindPeerDefaultBehaviors({ ctx, peer })
 
-	if(peer.public)
-		ctx.log.debug(`public ${peer.type} said hello without signature`)
-	else
-		ctx.log.debug(`${peer.type} ${peer.name} (${peer.id}) said hello with valid net signature`)
+	await measurePeerLatency({
+		ctx,
+		peer,
+		numMeasurements: 2,
+		interval: 250
+	})
 
-	ctx.log.info(`new ${peer.type}: ${peer.name}`)
+	if(isNew){
+		ctx.log.info(`new ${peer.type}: ${peer.name}`)
+	}else{
+		ctx.log.info(`reconnected ${peer.type}: ${peer.name}`)
+	}
 
-	ctx.peers.push(peer)
-	
-	recordPeerEvent({ ctx, peer, event: 'connect' })
-	flushPeers({ ctx })
+	peer.accepted = true
+	ctx.emit('peer:accept', peer)
 
-	let { handler } = ctx.handlers
+	let { handler } = ctx.peerHandlers
 		.find(({ type }) => type === peer.type) || {}
 
 	if(handler){
@@ -131,8 +157,6 @@ async function handleStream({ ctx, connection, stream }){
 			return
 		}
 	}
-	
-	ctx.emit('peer:new', peer)
 }
 
 async function handleDisconnection({ ctx, id }){
@@ -141,15 +165,19 @@ async function handleDisconnection({ ctx, id }){
 	if(!peer)
 		return
 
-	ctx.log.info(`lost ${peer.type} ${peer.name}`)
 	ctx.peers.splice(ctx.peers.indexOf(peer), 1)
 
 	recordPeerEvent({ ctx, peer, event: 'disconnect' })
-	flushPeers({ ctx })
+	flushPeerStore({ ctx })
 
-	ctx.emit('peer:lost', peer)
+	if(peer.authenticated){
+		ctx.log.info(`lost ${peer.type} ${peer.name}`)
+	}else{
+		ctx.log.debug(`lost ${peer.type} ${peer.name}`)
+	}
+
+	ctx.emit('peer:disconnect', peer)
 }
-
 
 async function performHandshake({ ctx, peer }){
 	peer.send('peer:auth', {
@@ -163,7 +191,10 @@ async function performHandshake({ ctx, peer }){
 	})
 
 	let { type, auth } = await peer.await('peer:auth', 7000)
-	let info = { type }
+	let info = {
+		type,
+		authenticated: true
+	}
 
 	if(auth){
 		let authInfo = verifyNetAuth({
@@ -189,7 +220,7 @@ async function performHandshake({ ctx, peer }){
 	}
 
 	peer.send('peer:info', {
-		name: ctx.config.node.name,
+		name: ctx.config.name,
 		addresses: ctx.libp2p.getMultiaddrs()
 			.map(addr => addr.toString())
 	})
@@ -200,6 +231,37 @@ async function performHandshake({ ctx, peer }){
 	)
 
 	return info
+}
+
+export async function measurePeerLatency({ ctx, peer, numMeasurements = 3, interval = 1000 }){
+	recordPeerEvent({ 
+		ctx, 
+		peer, 
+		event: 'measureLatency'
+	})
+
+	let measurements = []
+
+	for(let i=0; i<numMeasurements; i++){
+		let time = Date.now()
+		
+		try{
+			await peer.request('ping')
+		}catch(error){
+			ctx.log.warn(`latency measurement with ${peer.name} cancelled: ${error.message}`)
+			return
+		}
+
+		measurements.push(Date.now() - time)
+
+		await new Promise(resolve => setTimeout(resolve, interval))
+	}
+
+	peer.latency = Math.round(measurements.reduce((total, ping) => total + ping, 0) / 6)
+
+	flushPeerStore({ ctx })
+	
+	ctx.log.debug(`latency measurement with ${peer.name} completed: ${peer.latency} ms`)
 }
 
 function isTrustedPublicNode({ ctx, peer, type }){
@@ -214,14 +276,41 @@ function isTrustedPublicNode({ ctx, peer, type }){
 	return false
 }
 
-export async function connect({ ctx, address }){
-	ctx.log.debug(`dialing ${address}`)
+export async function connect({ ctx, node, address }){
+	if(node){
+		address = node.addresses
 
-	await ctx.libp2p.dial(
-		Array.isArray(address)
-			? address.map(addr => multiaddr(addr))
-			: multiaddr(address)
-	)
+		ctx.log.debug(`connecting to ${node.name}`)
+
+		recordPeerEvent({
+			ctx,
+			peer: node, 
+			event: 'dial'
+		})
+	}else{
+		ctx.log.debug(`dialing ${address}`)
+	}
+
+	try{
+		await ctx.libp2p.dial(
+			Array.isArray(address)
+				? address.map(addr => multiaddr(addr))
+				: multiaddr(address)
+		)
+	}catch(error){
+		if(node){
+			ctx.log.debug(`failed to connect to ${node.name}: ${error.message}`)
+		
+			recordPeerEvent({
+				ctx,
+				peer: node,
+				event: 'dialError',
+				meta: error
+			})
+		}else{
+			throw error
+		}
+	}
 }
 
 function shouldInitiateStream({ ctx, theirPeerId }){
