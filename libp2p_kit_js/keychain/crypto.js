@@ -1,5 +1,6 @@
 import crypto from 'crypto'
-import { generateKeyPair, generateKeyPairFromSeed, Ed25519PrivateKey } from '@libp2p/crypto/keys'
+import { generateKeyPair, generateKeyPairFromSeed } from '@libp2p/crypto/keys'
+import { Ed25519PrivateKey } from '@libp2p/crypto/keys/ed25519'
 import { base58btc } from 'multiformats/bases/base58'
 import { concat as uint8arrayConcat } from 'uint8arrays/concat'
 import { fromString as uint8arrayFromString } from 'uint8arrays/from-string'
