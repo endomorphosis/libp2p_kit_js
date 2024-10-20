@@ -1,6 +1,6 @@
 {
     "name": "libp2p_kit_js",
-    "version": "1.0.28",
+    "version": "1.0.29",
     "description": "This is a library that handles libp2p, REST, and websocket connections",
     "type": "module",
     "main": "index.js",
@@ -17,6 +17,7 @@
         "@mwni/toml": "^1.0.0",
         "aws-sdk": "^2.1597.0",
         "libp2p": "^2.1.9",
+        "libp2p-crypto": "^0.21.2",
         "moment": "^2.30.1",
         "tar": "^7.4.3",
         "util": "^0.12.5"
