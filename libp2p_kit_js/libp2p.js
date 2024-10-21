@@ -23,8 +23,8 @@ export class libp2pKit {
 			messageHistory: [],
 			libp2p: null
 		}
-		this.libp2p = this.initP2P(this.ctx) 
 	}
+
 
 	async initP2P({ ctx }){
 		ctx.peers = []
@@ -343,7 +343,3 @@ export class libp2pKit {
 	}
 
 }
-
-
-
-

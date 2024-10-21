@@ -14,5 +14,3 @@ export { initP2P, registerPeerHandler, connect } from './p2p.js'
 export { initPeering } from './peering.js'
 export { initPeerStore } from './store.js'
 export { applyLinkStateUpdate, copyPeersToLinkState, getLocalLinkState } from './linkstate.js'
-
-

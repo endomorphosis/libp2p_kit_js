@@ -13,9 +13,9 @@ export class libp2pKitJs {
         this.libp2pKit = new libp2pKit( resources, metadata )
     }
 
-    async init() {
+    async init(ctx) {
         console.log('libp2pKitJs.init()');
-        return this.test();
+        await this.libp2pKit.initP2P({ctx});
     }
 
     async test() {
