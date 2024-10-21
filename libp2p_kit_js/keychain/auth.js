@@ -1,4 +1,5 @@
-import { Ed25519PublicKey } from '@libp2p/crypto/keys'
+import '@libp2p/crypto/keys'
+export * from '@libp2p/crypto/keys'
 import { base58btc } from 'multiformats/bases/base58'
 import { fromString as uint8arrayFromString } from 'uint8arrays/from-string'
 import { toString as uint8arrayToString } from 'uint8arrays/to-string'
