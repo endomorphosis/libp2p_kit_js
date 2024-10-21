@@ -26,9 +26,6 @@ export class libp2pKit {
 	}
 
 	async initP2P({ ctx }){
-
-
-
 		ctx.peers = []
 		ctx.peerHandlers = []
 		ctx.messageHistory = []
