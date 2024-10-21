@@ -6,8 +6,14 @@ import { webSockets } from '@libp2p/websockets'
 import { mplex } from '@libp2p/mplex'
 import { noise } from '@chainsafe/libp2p-noise'
 import { multiaddr } from '@multiformats/multiaddr'
-import { flushPeerStore, recordPeerEvent } from './store.js'
 import { initMessageBus } from './bus.js'
+import { bindStringToMultiaddrs } from './utils.js'
+import { tcp } from '@libp2p/tcp'
+import { webSockets } from '@libp2p/websockets'
+import { yamux } from '@chainsafe/libp2p-yamux'
+import { flushPeerStore, recordPeerEvent, whenLastPeerEvent } from './store.js'
+import { initMulticastDNS } from './mdns.js'
+
 
 export class libp2pKit {
 	constructor(resources, metadata) {
