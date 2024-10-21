@@ -9,14 +9,19 @@ import { multiaddr } from '@multiformats/multiaddr'
 import { flushPeerStore, recordPeerEvent } from './store.js'
 import { initMessageBus } from './bus.js'
 
-
 export class libp2pKit {
 	constructor(resources, metadata) {
 		this.resources = resources;
 		this.metadata = metadata;
-
-		this.ctx.config = {
-		
+		this.ctx = {
+			config: {
+				identityKey: null,
+				listen: null
+			},
+			peers: [],
+			peerHandlers: [],
+			messageHistory: [],
+			libp2p: null
 		}
 		this.libp2p = this.initP2P(this.ctx) 
 	}

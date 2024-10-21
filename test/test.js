@@ -20,8 +20,8 @@ export class test_libp2p_kit_js {
     
     async test() {
         let test_results = {}
-        console.log("Running tests for ipfs_accelerate_js/main.js");
-        console.log("Running tests for ipfs_accelerate_js/index.js");
+        console.log("Running tests for libp2p_kit_js/main.js");
+        console.log("Running tests for libp2p_kit_js/index.js");
         console.log("Running tests for index.js");
         return test_results
     }
