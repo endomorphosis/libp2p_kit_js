@@ -25,115 +25,141 @@ export class libp2pKit {
 		}
 	}
 
-
 	async initP2P({ ctx }){
+
+
+
 		ctx.peers = []
 		ctx.peerHandlers = []
 		ctx.messageHistory = []
 		ctx.libp2p = await createLibp2p({
-			peerId: ctx.config.identityKey
-				? await createFromPrivKey(deriveKeyPair(ctx.config.identityKey))
+			privateKey: ctx.config.identityKey
+				? deriveKeyPair(ctx.config.identityKey)
 				: undefined,
 			addresses: {
-				listen: ctx.config.listen
+				listen: ctx.config.bind
+					? bindStringToMultiaddrs({
+						bind: ctx.config.bind,
+						protocol: ctx.type === 'beacon' ? 'ws' : 'tcp'
+					})
+					: undefined
 			},
 			transports: [
 				tcp(),
 				webSockets()
 			],
 			streamMuxers: [
-				mplex()
+				yamux()
 			],
-			connectionEncryption: [
+			connectionEncrypters: [
 				noise()
 			]
 		})
-	
+
 		ctx.libp2p.addEventListener('peer:connect', event => {
 			handleConnection({
 				ctx, 
 				connection: ctx.libp2p.getConnections(event.detail)[0]
 			})
 		})
-	
+
 		ctx.libp2p.addEventListener('peer:disconnect', event => {
 			ctx.log.debug(`lost connection to ${event.detail}`)
-	
+
 			handleDisconnection({
 				ctx, 
 				id: event.detail.toString()
 			})
 		})
-	
+
 		ctx.libp2p.handle('/tasknet/1.0', async ({ connection, stream }) => {
 			await handleStream({
 				ctx,
-				peer: ctx.peers.find(peer => peer.id === connection.remotePeer.toString()),
+				connection,
 				stream
 			})
 		})
-	
+
 		Object.defineProperty(ctx, 'id', {
 			get: () => ctx.libp2p.peerId.toString()
 		})
-	
-		ctx.log.info(`reachable via:`)
-	
-		for(let addr of ctx.libp2p.getMultiaddrs()){
-			ctx.log.info(`- ${addr}`)
+
+		if(ctx.config.bind){
+			ctx.log.info(`reachable via:`)
+
+			for(let addr of ctx.libp2p.getMultiaddrs()){
+				ctx.log.info(`- ${addr}`)
+			}
+		}
+
+		if(ctx.config.net?.beacon){
+			ctx.log.info(`connecting to beacon ${ctx.config.net.beacon}`)
+			connectBeacon({
+				ctx,
+				address: ctx.config.net.beacon
+			})
+		}
+
+		if(ctx.config.net?.mdns){
+			ctx.log.info(`using mDNS for local peer discovery`)
+			initMulticastDNS({
+				ctx,
+				readOnly: ctx.type === 'client'
+			})
 		}
 	}
 
 	async registerPeerHandler({ ctx, type, handler }){
 		ctx.peerHandlers.push({ type, handler })
 	}
-	
+
 	async handleConnection({ ctx, connection }){
 		let id = connection.remotePeer.toString()
 		let peerInfo = ctx.store.peers.find(peer => peer.id === id)
-		let peer = {
-			id,
-			connection
-		}
-	
+
 		if(peerInfo){
-			Object.assign(peer, peerInfo)
-			ctx.log.debug(`new ${connection.direction} connection to ${peer.name || 'known peer'} ${id}`)
+			ctx.log.debug(`new ${connection.direction} connection to ${peerInfo.name || 'known peer'} ${id}`)
 		}else{
 			ctx.log.debug(`new ${connection.direction} connection to unknown peer ${id}`)
 		}
-	
-		ctx.peers.push(peer)
-	
-		recordPeerEvent({ 
-			ctx,
-			peer,
-			event: 'connect'
-		})
-	
-		if(shouldInitiateStream({ ctx, theirPeerId: connection.remotePeer })){
+
+		if(connection.direction === 'outbound'){
 			await handleStream({
 				ctx,
-				peer,
+				connection,
 				stream: await connection.newStream([`/tasknet/1.0`]),
 			})
 		}
 	}
 
-	async handleStream({ ctx, peer, stream }){
-		let isNew = !peer.authenticated
-	
+	async handleStream({ ctx, connection, stream }){
+		let id = connection.remotePeer.toString()
+		let peerInfo = ctx.store.peers.find(peer => peer.id === id)
+		let peer = { id, connection, ...peerInfo }
+		let isNew = whenLastPeerEvent({ ctx, peer, event: 'accept' }) === undefined
+
 		Object.assign(
 			peer,
 			initMessageBus(stream)
 		)
-	
+
 		try{
 			Object.assign(
 				peer,
 				await performHandshake({ ctx, peer })
 			)
+
+			ctx.peers.push(peer)
+
 			recordPeerEvent({ ctx, peer, event: 'accept' })
+			bindPeerDefaultBehaviors({ ctx, peer })
+
+			await measurePeerLatency({
+				ctx,
+				peer,
+				numMeasurements: 2,
+				interval: 250
+			})
 		}catch(e){
 			recordPeerEvent({ ctx, peer, event: 'reject' })
 			ctx.log.debug(`peer ${peer.id} rejected: ${e.message}`)
@@ -142,28 +168,18 @@ export class libp2pKit {
 		}finally{
 			flushPeerStore({ ctx })
 		}
-	
-		bindPeerDefaultBehaviors({ ctx, peer })
-	
-		await measurePeerLatency({
-			ctx,
-			peer,
-			numMeasurements: 2,
-			interval: 250
-		})
-	
+
 		if(isNew){
 			ctx.log.info(`new ${peer.type}: ${peer.name}`)
 		}else{
 			ctx.log.info(`reconnected ${peer.type}: ${peer.name}`)
 		}
-	
-		peer.accepted = true
+		
 		ctx.emit('peer:accept', peer)
-	
+
 		let { handler } = ctx.peerHandlers
 			.find(({ type }) => type === peer.type) || {}
-	
+
 		if(handler){
 			try{
 				await handler(peer)
@@ -174,27 +190,24 @@ export class libp2pKit {
 			}
 		}
 	}
-	
+
 	async handleDisconnection({ ctx, id }){
 		let peer = ctx.peers.find(peer => peer.id === id)
-	
-		if(!peer)
+
+		if(!peer){
+			ctx.log.debug(`lost connection to unidentified peer ${id}`)
 			return
-	
+		}
+
 		ctx.peers.splice(ctx.peers.indexOf(peer), 1)
-	
+		ctx.log.info(`lost ${peer.type} ${peer.name}`)
+
 		recordPeerEvent({ ctx, peer, event: 'disconnect' })
 		flushPeerStore({ ctx })
-	
-		if(peer.authenticated){
-			ctx.log.info(`lost ${peer.type} ${peer.name}`)
-		}else{
-			ctx.log.debug(`lost ${peer.type} ${peer.name}`)
-		}
-	
+
 		ctx.emit('peer:disconnect', peer)
 	}
-	
+
 	async performHandshake({ ctx, peer }){
 		peer.send('peer:auth', {
 			type: ctx.type,
@@ -205,49 +218,53 @@ export class libp2pKit {
 				})
 				: undefined
 		})
-	
+
 		let { type, auth } = await peer.await('peer:auth', 7000)
-		let info = {
-			type,
-			authenticated: true
-		}
-	
+		let info = { type }
+
 		if(auth){
 			let authInfo = verifyNetAuth({
 				auth,
 				nonce: ctx.libp2p.peerId.publicKey,
 				netkey: ctx.netkey
 			})
-	
+
 			if(!authInfo)
 				throw new Error(`Invalid signature`)
-	
+
+			if(authInfo.privilege === 'client' && info.type !== 'client')
+				throw new Error(`Forbidden peer type`)
+
 			Object.assign(info, authInfo)
 		}else{
 			let trust = isTrustedPublicNode({ ctx, peer, type })
-	
+
 			if(!trust)
 				throw new Error(`Provided no net-auth and is not a trusted public node`)
-	
+
 			Object.assign(info, {
 				public: true,
 				...trust
 			})
 		}
-	
+
 		peer.send('peer:info', {
 			name: ctx.config.name,
 			addresses: ctx.libp2p.getMultiaddrs()
 				.map(addr => addr.toString())
 		})
-	
+
 		Object.assign(
 			info, 
 			await peer.await('peer:info', 3000)
 		)
-	
+
 		return info
-	}	
+	}
+
+	bindPeerDefaultBehaviors({ ctx, peer }){
+		peer.handle('ping', () => { time: Date.now() })
+	}
 
 	async measurePeerLatency({ ctx, peer, numMeasurements = 3, interval = 1000 }){
 		recordPeerEvent({ 
@@ -255,9 +272,9 @@ export class libp2pKit {
 			peer, 
 			event: 'measureLatency'
 		})
-	
+
 		let measurements = []
-	
+
 		for(let i=0; i<numMeasurements; i++){
 			let time = Date.now()
 			
@@ -267,37 +284,43 @@ export class libp2pKit {
 				ctx.log.warn(`latency measurement with ${peer.name} cancelled: ${error.message}`)
 				return
 			}
-	
+
 			measurements.push(Date.now() - time)
-	
+
 			await new Promise(resolve => setTimeout(resolve, interval))
 		}
-	
+
 		peer.latency = Math.round(measurements.reduce((total, ping) => total + ping, 0) / 6)
-	
+
 		flushPeerStore({ ctx })
 		
 		ctx.log.debug(`latency measurement with ${peer.name} completed: ${peer.latency} ms`)
 	}
-	
-	isTrustedPublicNode({ ctx, peer, type }){
-		if(type === 'beacon'){
-			return {
-				name: peer.connection.remoteAddr.toString()
-					.split('/')
-					.at(2)
+
+	async connectBeacon({ ctx, address }){
+		while(true){
+			try{
+				return await connect({
+					ctx,
+					address: bindStringToMultiaddrs({
+						bind: address,
+						protocol: 'ws',
+						defaultPort: 40001
+					})
+				})
+			}catch(error){
+				ctx.log.warn(`beacon unreachable: ${error.message}`)
+				await new Promise(resolve => setTimeout(resolve, 10000))
 			}
 		}
-	
-		return false
 	}
-	
+
 	async connect({ ctx, node, address }){
 		if(node){
 			address = node.addresses
-	
-			ctx.log.debug(`connecting to ${node.name}`)
-	
+
+			ctx.log.debug(`connecting to ${node.name || node.id}`)
+
 			recordPeerEvent({
 				ctx,
 				peer: node, 
@@ -306,7 +329,7 @@ export class libp2pKit {
 		}else{
 			ctx.log.debug(`dialing ${address}`)
 		}
-	
+
 		try{
 			await ctx.libp2p.dial(
 				Array.isArray(address)
@@ -328,18 +351,22 @@ export class libp2pKit {
 			}
 		}
 	}
-	
-	shouldInitiateStream({ ctx, theirPeerId }){
-		let myPeerId = ctx.libp2p.peerId
-		let [mySize, theirSize] = [myPeerId.publicKey, theirPeerId.publicKey]
-			.map(bytes => bytes.subarray(-8))
-			.map(bytes => bytes.reduce((x, y) => x * y, 1))
-	
-		return mySize > theirSize
-	}
-	
-	bindPeerDefaultBehaviors({ ctx, peer }){
-		peer.handle('ping', () => { time: Date.now() })
+
+	getPendingConnectionsCount({ ctx }){
+		return ctx.libp2p.getDialQueue().length + ctx.libp2p.getConnections()
+			.filter(connection => ctx.peers.every(peer => peer.connection !== connection))
+			.length
 	}
 
+	isTrustedPublicNode({ ctx, peer, type }){
+		if(type === 'beacon'){
+			return {
+				name: peer.connection.remoteAddr.toString()
+					.split('/')
+					.at(2)
+			}
+		}
+
+		return false
+	}
 }
