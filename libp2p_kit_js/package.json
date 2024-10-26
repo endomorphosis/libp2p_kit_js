@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@chainsafe/libp2p-yamux": "^7.0.1"
+  }
+}
