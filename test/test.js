@@ -1,4 +1,4 @@
-import { libp2pKitJs } from "../libp2p_kit_js/index.js"
+import { libp2pKitJs } from "../index.js"
 // import { requireConfig } from "../config/config.js";
 import path from "path";
 import fs from "fs";

@@ -1,5 +1,8 @@
 {
+  "type": "module",
+  "main": "index.js",
   "dependencies": {
-    "@chainsafe/libp2p-yamux": "^7.0.1"
+    "@chainsafe/libp2p-yamux": "^7.0.1",
+    "multicast-dns": "^7.2.5"
   }
 }
